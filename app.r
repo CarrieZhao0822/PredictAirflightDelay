@@ -9,12 +9,12 @@
 
 library(shinydashboard) 
 library(shiny)
+library(knitr)
+library(htmltools)
 library(h2o)
 library(dplyr)
+library(tidyr)
 library(ggplot2)
-library('dplyr')
-library(reshape)
-require(shinydashboard)
 library(data.table)
 
 options(java.parameters = "-Xmx64048m") # 64048 is 64 GB
@@ -31,7 +31,7 @@ df <- rbind(df,df_3)
 df <- rbind(df,df_4)
 df <- rbind(df,df_5)
 df <- rbind(df,df_6)
-rm(df,df_1,df_2,df_3,df_4,df_5,df_6)
+rm(df_1,df_2,df_3,df_4,df_5,df_6)
 
 ####################################For Introduction
 text1 <- c("Abstract")
@@ -68,8 +68,7 @@ net_flights <- subset(net_flights, !(is.na(net_flights$AIR_TIME))) #Amount of ti
 #CANCELLED FLIGHT ANALYSIS
 cancelled_flights <- subset(flight_2018, flight_2018$CANCELLED==1)
 nrow(cancelled_flights)/nrow(flight_2018)*100 #Percentage of cancelled flights among all flights is 1.616
-#[1] 1.616204
-
+#1.597392
 #CANCELLATION CODES
 #A-Carrier Caused
 #B-Weather
@@ -77,7 +76,7 @@ nrow(cancelled_flights)/nrow(flight_2018)*100 #Percentage of cancelled flights a
 #D-Security
 cancellation_reason <- summary(factor(cancelled_flights$CANCELLATION_CODE))
 #A     B     C     D 
-#29484 61984 25072    44 
+#4135 8712 3606    8 
 Cancel_reason <- c("Carrier","Weather","NAS","Security")
 xa<-c(cancellation_reason[[1]],cancellation_reason[[2]],cancellation_reason[[3]],cancellation_reason[[4]])
 percentage<-round(xa/sum(xa)*100)
@@ -87,10 +86,10 @@ labels_new<-paste(Cancel_reason,percentage)
 #concatenates the above output with the '%' symbol 
 final_labels<-paste(labels_new,'%',sep = "")
 
-cancellation_reason[1]/sum(cancellation_reason)*100 #Carrier Caused cancellation - 25.28992%
-cancellation_reason[2]/sum(cancellation_reason)*100 #Weather caused cancellation - 53.16682%
-cancellation_reason[3]/sum(cancellation_reason)*100 #NAS caused cancellation - 21.50552%
-cancellation_reason[4]/sum(cancellation_reason)*100 #Security caused cancellation - 0.03774103%
+cancellation_reason[1]/sum(cancellation_reason)*100 #Carrier Caused cancellation - 25.11998%
+cancellation_reason[2]/sum(cancellation_reason)*100 #Weather caused cancellation - 52.9251%
+cancellation_reason[3]/sum(cancellation_reason)*100 #NAS caused cancellation - 21.90632%
+cancellation_reason[4]/sum(cancellation_reason)*100 #Security caused cancellation - 0.04859972%
 
 #Cancellation rates are calculated for each airline
 all_cancellation_fq <- summary(factor(cancelled_flights$OP_CARRIER))
@@ -101,58 +100,69 @@ names(cancel_rate) <- NULL
 cancel_rate_table <- data.frame(cancel_rate_name, cancel_rate) 
 colnames(cancel_rate_table) <- c("Airline_Company_Code","Cancelation_Rate")
 
-#rm(flight_2018)
-
 ###############Calculation for Delay
 #Input new column with month
 net_flights$FL_DATE <- as.Date(net_flights$FL_DATE)
 net_flights$Month <- as.numeric(format(net_flights$FL_DATE,'%m'))
 
-attach(net_flights)
+#attach(net_flights)
 #Calculate mean of Arrived delay time per month per Airline
 arrive_delay <- net_flights[ , c("Month","OP_CARRIER","ARR_DELAY")]
-arrive_mean_delay <- aggregate(arrive_delay,by=list(Month = Month, AirLine = OP_CARRIER ), FUN=mean,na.rm = TRUE)
-arrive_mean_delay$Month <- NULL
 
-arrive_mean_delay$OP_CARRIER <- NULL
+#str(arrive_delay)
+arrive_mean_delay <- arrive_delay %>%
+  group_by(Month,OP_CARRIER) %>%
+  summarise_at(vars(ARR_DELAY), list(name = mean),na.rm = TRUE)
+colnames(arrive_mean_delay) <- c("Month","AirLine","ARR_DELAY")
+
+#arrive_mean_delay <- aggregate(arrive_delay,by=list(Month = Month, AirLine = OP_CARRIER ), FUN=mean,na.rm = TRUE)
+#arrive_mean_delay$Month <- NULL
+#arrive_mean_delay$OP_CARRIER <- NULL
 
 #Calculate mean of Arrived delay time per month
-arrive_delay <- net_flights[ , c("Month","OP_CARRIER","ARR_DELAY")]
-arrive_mean_delay_m <- aggregate(arrive_delay,by=list(Month = Month), FUN=mean,na.rm = TRUE)
-arrive_mean_delay_m$Month <- NULL
-arrive_mean_delay_m$OP_CARRIER <- NULL
+#arrive_delay <- net_flights[ , c("Month","OP_CARRIER","ARR_DELAY")]
+
+arrive_mean_delay_m <- arrive_delay %>%
+  group_by(Month) %>%
+  summarise_at(vars(ARR_DELAY), list(name = mean),na.rm = TRUE)
+colnames(arrive_mean_delay_m) <- c("Month","ARR_DELAY")
+
+#arrive_mean_delay_m <- aggregate(arrive_delay,by=list(Month = Month), FUN=mean,na.rm = TRUE)
+#arrive_mean_delay_m$Month <- NULL
+#arrive_mean_delay_m$OP_CARRIER <- NULL
 
 
 #Calculate mean of 5 delay reason per month onlyl
 flights_delay <- net_flights[ , c("Month","CARRIER_DELAY","WEATHER_DELAY","NAS_DELAY","SECURITY_DELAY","LATE_AIRCRAFT_DELAY")]
-mean_delay_month <- aggregate(flights_delay,by=list(Month = Month), FUN=mean,na.rm = TRUE)
-mean_delay_month$Month <- NULL
+#mean_delay_month <- aggregate(flights_delay,by=list(Month = Month), FUN=mean,na.rm = TRUE)
+#mean_delay_month$Month <- NULL
+mean_delay_month <- flights_delay %>%
+  group_by(Month) %>%
+  summarise_at(vars("CARRIER_DELAY","WEATHER_DELAY","NAS_DELAY","SECURITY_DELAY","LATE_AIRCRAFT_DELAY"), list(name = mean),na.rm = TRUE)
+colnames(mean_delay_month) <- c("Month","CARRIER_DELAY","WEATHER_DELAY","NAS_DELAY","SECURITY_DELAY","LATE_AIRCRAFT_DELAY")
 
 #Calculate mean of 5 delay reason per month per Airline
 flights_delay <- net_flights[ , c("Month","OP_CARRIER","CARRIER_DELAY","WEATHER_DELAY","NAS_DELAY","SECURITY_DELAY","LATE_AIRCRAFT_DELAY")]
-mean_delay <- aggregate(flights_delay,by=list(Month = Month, AirLine = OP_CARRIER ), FUN=mean,na.rm = TRUE)
-mean_delay$Month <- NULL
-mean_delay$OP_CARRIER <- NULL
+#mean_delay <- aggregate(flights_delay,by=list(Month = Month, AirLine = OP_CARRIER ), FUN=mean,na.rm = TRUE)
+#mean_delay$Month <- NULL
+#mean_delay$OP_CARRIER <- NULL
+
+mean_delay <- flights_delay %>%
+  group_by(Month,OP_CARRIER) %>%
+  summarise_at(vars("CARRIER_DELAY","WEATHER_DELAY","NAS_DELAY","SECURITY_DELAY","LATE_AIRCRAFT_DELAY"), list(name = mean),na.rm = TRUE)
+colnames(mean_delay) <- c("Month","AirLine","CARRIER_DELAY","WEATHER_DELAY","NAS_DELAY","SECURITY_DELAY","LATE_AIRCRAFT_DELAY")
 
 ###################################
 #Plot for cancellation and delay
 ###################################
-#source("multiplot.R")
-
-#par(mfrow=c(1,2), bg="lightgrey")
 
 #####Plot for Cancellation
-#pie3D(x,labels = final_labels,explode = 0.1,main='Pie chart of Cancelization Reason',labelcex = 1.5,radius = 0.7)
-#pie3D(cancel_rate_table$Cancelation_Rate,labels=cancel_rate_table$Airline_Company_Code,explode=0.1,
-#      main="Pie Chart of Airline Cancellation Rate",radius = 0.7)
 p1 <- ggplot(data.frame(xa,final_labels), aes(x = "", y = xa, fill = final_labels)) +
   geom_col(color = "black") +
   geom_label(aes(label = final_labels),
              position = position_stack(vjust = 0.5),
              show.legend = FALSE) +
   coord_polar(theta = "y")
-#p1
-#p1 <- pie(x, labels = final_labels, main = "Pie chart of Cancellation Reason",col = rainbow(length(x)))
 p2 <- pie(cancel_rate_table$Cancelation_Rate, labels = cancel_rate_table$Airline_Company_Code, main = "Pie chart of Cancelization Reason",col = rainbow(length(cancel_rate_table$Cancelation_Rate)))
 p2 <- ggplot(cancel_rate_table, aes(x = "", y = Cancelation_Rate, fill = Airline_Company_Code)) +
   geom_col(color = "black") +
@@ -160,9 +170,7 @@ p2 <- ggplot(cancel_rate_table, aes(x = "", y = Cancelation_Rate, fill = Airline
              position = position_stack(vjust = 0.5),
              show.legend = FALSE) +
   coord_polar(theta = "y")
-#p2
 #Plot delay reason by month for selected airline 
-#ggplot(arrive_mean_delay_m, aes(x=factor(Month),y=ARR_DELAY)) + geom_line()
 p3 <- ggplot(arrive_mean_delay_m, aes(x=Month,y=ARR_DELAY)) + geom_point() + geom_line(size=2,color="blue")
 p3 + labs(
   title = "Flight Arrived Dealy by Month",
@@ -178,9 +186,15 @@ p5 <-ggplot(arrive_mean_delay[arrive_mean_delay$AirLine=="AA",c(1,3)], aes(x=Mon
 # DL arrive delay per month
 p6 <-ggplot(arrive_mean_delay[arrive_mean_delay$AirLine=="DL",c(1,3)], aes(x=Month,y=ARR_DELAY)) + geom_point() + geom_line(size=2,color="red")
 
-
 # For 5 reason plot
-my_data <- melt(mean_delay_month,id = "Month")   
+#my_data <- mean_delay_month %>%
+#  pivot_longer(!Month,names_to = "variable", values_to = "value")
+#class(my_data)
+#aaa <- data.frame(t(mean_delay_month))
+#aaa[12][c(2:6),1]
+#value <- c(aaa[1][c(2:6),1],aaa[2][c(2:6),1],aaa[3][c(2:6),1],aaa[4][c(2:6),1],
+my_data <- gather(mean_delay_month, variable, value, 'CARRIER_DELAY':'LATE_AIRCRAFT_DELAY') ## Note the backticks
+
 p7 <- ggplot(my_data, aes(x=factor(Month),y=value,fill=variable)) + geom_col(position = "dodge")
 p7 + labs(
   title = "Flight Dealy Reason by Month",
@@ -189,18 +203,12 @@ p7 + labs(
   y = "Delay Time"
 )
 # Show AA for 5 reason plot
-my_data1 <- melt(mean_delay,id = c("Month","AirLine"))
+my_data1 <- gather(mean_delay, variable, value, 'CARRIER_DELAY':'LATE_AIRCRAFT_DELAY') ## Note the backticks
+
 p8 <- ggplot(my_data1[my_data1$AirLine=="AA",c(1,3,4)], aes(x=Month,y=value,fill=variable)) + geom_col(position = "dodge")
 # Show DL for 5 reason plot
-my_data1 <- melt(mean_delay,id = c("Month","AirLine"))
+
 p9 <- ggplot(my_data1[my_data1$AirLine=="DL",c(1,3,4)], aes(x=Month,y=value,fill=variable)) + geom_col(position = "dodge")
-
-
-#rm(arrive_delay,cancelled_flights,flight_2018,flights_delay,net_flights)
-#rm(arrive_mean_delay,arrive_mean_delay_m,cancel_rate_table,mean_delay,mean_delay_month,my_data,my_data1)
-#rm(all_cancellation_fq,all_flight_fq,cancel_rate,cancel_rate,cancel_rate_name,cancel_rate_table)
-#rm(Cancel_reason,cancellation_reason,final_labels,labels_new,percentage,x)
-#rm(multiplot)
 
 ######################################################################
 #Part 2
@@ -209,26 +217,17 @@ p9 <- ggplot(my_data1[my_data1$AirLine=="DL",c(1,3,4)], aes(x=Month,y=value,fill
 # Create subset to only keep the columns that we need.
 subset <- net_flights %>%
   select(Month, OP_CARRIER , ORIGIN ,DEST,DEP_DELAY, CRS_ELAPSED_TIME ,ACTUAL_ELAPSED_TIME, ARR_DELAY,DISTANCE )
-#change column type
 
-#subset$FL_DATE <- as.factor(subset$FL_DATE)
 subset$OP_CARRIER <- as.factor(subset$OP_CARRIER)
 subset$ORIGIN <- as.factor(subset$ORIGIN)
 subset$DEST <- as.factor(subset$DEST)
-#str(subset)
-
 
 h2o.init(nthreads=12, max_mem_size="64g")
 
 # load d data frame into h20 cluster
-
-#carsData <- h2o.importFile(f)
 data <- as.h2o(subset)
 
-#str(data)
-#head(data)
-#gc() 
-
+gc()
 # prepare the data
 y <- "ARR_DELAY"                                # target variable to learn
 x <- setdiff(names(subset), y)                # feature variables are all other columns
@@ -236,76 +235,28 @@ x <- setdiff(names(subset), y)                # feature variables are all other 
 parts <- h2o.splitFrame(data, 0.8, seed=99) # randomly partition data into 80/20
 train <- parts[[1]]                         # random set of training obs
 test <- parts[[2]]                          # random set of testing obs
-
-
 # Train a Deep Learning model
 
-# train$y <- log(train$y)
-# test$y <- log(test$y)
-#rm(df)
 h2oDepLearn <- h2o.deeplearning(x, y, train)
 
-#h2oDepLearn
-
 #check training performance
-
 h2o.performance(h2oDepLearn, test)
-#MSE:  0.2330426
-#RMSE:  0.4827449
-#MAE:  0.1813015
-#RMSLE:  NaN
-#Mean Residual Deviance :  0.2330426
-
-#MSE:  0.2852991
-#RMSE:  0.5341339
-#MAE:  0.1899758
-#RMSLE:  NaN
-#Mean Residual Deviance :  0.2852991
 
 p <- h2o.predict(h2oDepLearn, test)
 
 p <-  as.data.frame(p)
 predDelay <- cbind(as.data.frame(test$Month), as.data.frame(p$predict), as.data.frame(test$ARR_DELAY) )
 
-#temp_predDelay <- predDelay
-#head(p)
-#head(arrive_delay)
-#head(predDelay)
-
-#head(predDelay)
 #write.table(x=predDelay, sep=",", file="pred_delay_results.csv",row.names = T)
 summary(predDelay)
-#month          predict           ARR_DELAY       
-#Min.   : 1.00   Min.   : -79.202   Min.   :-117.000  
-#1st Qu.: 4.00   1st Qu.: -14.060   1st Qu.: -14.000  
-#Median : 7.00   Median :  -5.841   Median :  -6.000  
-#Mean   : 6.58   Mean   :   5.080   Mean   :   5.007  
-#3rd Qu.:10.00   3rd Qu.:   7.822   3rd Qu.:   8.000  
-#Max.   :12.00   Max.   :1778.819   Max.   :1778.000  
-#NA's   :560       
-
-#predict           ARR_DELAY       
-#Min.   :-200.358   Min.   :-120.000  
-#1st Qu.: -14.089   1st Qu.: -14.000  
-#Median :  -5.456   Median :  -6.000  
-#Mean   :   5.593   Mean   :   5.117  
-#3rd Qu.:   8.640   3rd Qu.:   8.000  
-#Max.   :1994.825   Max.   :2023.000  
-#NA's   :27542     
 predPlot <- ggplot(data=predDelay, aes(x=p$predict, y=ARR_DELAY)) + ggtitle("Plot of Arrival DELAY") + geom_point(colour="blue") + geom_abline(intercept = 0, slope = 2,color = "red", size = 1)
-
-# train$FL_DATE = as.factor(train$FL_DATE)
-# train$OP_CARRIER = as.factor(train$OP_CARRIER)
-# train$ORIGIN = as.factor(train$ORIGIN)
-# train$DEST = as.factor(train$DEST)
-# train$ARR_TIME = as.factor(train$ARR_TIME)
-# train$CANCELLED = as.factor(train$CANCELLED)
-# train$ARR_DELAY = as.factor(train$ARR_DELAY)
 
 my_data_test <- predDelay
 names(my_data_test) <- c("Month","Predict_Delay","Actual_Delay")
-my_data_test <- melt(my_data_test,id = "Month")   
 
+my_data_test <- gather(my_data_test, variable, value, 'Predict_Delay':'Actual_Delay') ## Note the backticks
+
+my_data_test = my_data_test[-which(is.na(my_data_test$value)),]
 p10 <- ggplot(my_data_test, aes(x=factor(Month),y=value,fill=variable)) + geom_col(position = "dodge")
 p10 + labs(
   title = "Predict Vs Actual Arrived Delay",
@@ -313,8 +264,6 @@ p10 + labs(
   x = "Month",
   y = "Delay Time"
 )
-p10
-
 
 Predict_Delay <- c("Min.   : -79.202","1st Qu.: -14.060","Median :  -5.841","Mean   :   5.080","3rd Qu.:   7.822","Max.   :1778.819")
 Actual_Delay <- c("Min.   :-117.000","1st Qu.: -14.000","Median :  -6.000","Mean   :   5.007","3rd Qu.:   8.000","Max.   :1778.000")
@@ -324,7 +273,6 @@ h20_DeepLearn <- c("MSE:","RMSE:","MAE:","Mean Residual Deviance :")
 h2o.performance <- c("0.2330426","0.4827449","0.1813015","0.2330426")
 p11 <- data.frame(h20_DeepLearn, h2o.performance)
 
-#rm(arrive_delay,df,flight_2018,flights_delay,net_flights,subset)
 
 # Define UI for application that draws a histogram
 library(shinydashboard)
@@ -406,7 +354,6 @@ tbs <- tabItems(
   )
   
 )
-
 
 # combine the two fluid rows to make the body
 body <- dashboardBody(tbs,
